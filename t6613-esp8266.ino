@@ -11,7 +11,7 @@ char sensortopic[128];
 
 void setup() {
   Serial.begin(19200);
-  WiFi.begin("revspace-pub-2.4ghz", "");
+  WiFi.begin("revspace-dingen", "$GeheimWachtwoord");
   mqtt.setServer("mosquitto.space.revspace.nl", 1883);
   sprintf(id, "%06x", ESP.getChipId());
   sprintf(debugtopic, "revdebug/co2/%06x", ESP.getChipId());
@@ -24,39 +24,52 @@ void loop() {
   while (!mqtt.connected()) {
     mqtt.connect(id);
     mqtt.publish(debugtopic, "connected");
+    delay(10);
   }
   mqtt.loop();
+
   if (WiFi.status() != WL_CONNECTED) ESP.restart();
 
   Serial.write("\xff\xfe\x02\x02\x03");
+
   delay(400);
 
   char buf[5];
   for (int i = 0; i < 5; i++) {
     unsigned int timeout = millis() + 1000;
+
     while (! Serial.available()) {
+
       if (millis() > timeout) {
+
         mqtt.publish(debugtopic, "No response from sensor, restarting");
+        delay(1000);
+
         ESP.reset();  // XXX this sometimes hangs :(
       }
     }
     buf[i] = Serial.read();
-  }
 
+  }
   if (buf[0] != 0xFF || buf[1] != 0xFA || buf[2] != 2) {
     mqtt.publish(debugtopic, "Weird output from sensor, restarting");
+    delay(1000);
     ESP.reset();
   }
   
   co2 = 256 * buf[3] + buf[4];
   
   char message[128];
+
   sprintf(message, "%d PPM", co2);
   
   if (co2) {
     mqtt.publish(sensortopic, message, 1);
+
   } else {
     mqtt.publish(debugtopic, "No reading yet");
+
   }
   delay(4000);
+
 }
